@@ -1,4 +1,3 @@
-```html
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -619,7 +618,7 @@
             <input id="lockerPassword" type="password" maxlength="16" placeholder="请输入密码，例如 123456" value="" />
           </div>
           <div class="helper">
-            当前为网页演示版，建议与板端默认密码保持一致，例如 <code>123456</code>。
+            当前为网页真实联动版，页面会通过本地桥接服务向板端发送开柜请求。。
             不同柜体会显示不同区域和默认状态信息。
           </div>
         </div>
@@ -852,44 +851,74 @@
       document.title = `智能储物柜 - ${cabinet.name}`;
     }
 
-    document.getElementById('openBtn')?.addEventListener('click', () => {
-      const { box, mode } = getParams();
-      const cabinet = getCabinetInfo(box);
-      const modeZh = modeToZh(mode);
-      const statusText = document.getElementById('statusText');
-      const password = document.getElementById('lockerPassword')?.value.trim() ?? '';
+    document.getElementById('openBtn')?.addEventListener('click', async () => {
+  const { box, mode } = getParams();
+  const cabinet = getCabinetInfo(box);
+  const modeZh = modeToZh(mode);
+  const statusText = document.getElementById('statusText');
+  const password = document.getElementById('lockerPassword')?.value.trim() ?? '';
 
-      if (password.length < 4) {
-        setPasswordState(false, '密码过短');
-        if (statusText) {
-          statusText.textContent = `${cabinet.name} 密码长度不足`;
-        }
-        setDoorClosed();
-        return;
-      }
+  if (!password) {
+    setPasswordState(false, '请输入密码');
+    if (statusText) {
+      statusText.textContent = `${cabinet.name} 请输入密码`;
+    }
+    setDoorClosed();
+    return;
+  }
 
-      if (password !== '123456') {
-        setPasswordState(false, '密码错误');
-        if (statusText) {
-          statusText.textContent = `${cabinet.name} 密码验证失败`;
-        }
-        setDoorClosed();
-        return;
-      }
+  setPasswordState(true, '校验中');
+  setDoorClosed();
 
-      setPasswordState(true, '校验通过');
+  if (statusText) {
+    statusText.textContent = `请求发送中：${cabinet.name}，${modeZh}...`;
+  }
 
-      if (statusText) {
-        statusText.textContent = `请求发送中：${cabinet.name}，${modeZh}...`;
-      }
-
-      setTimeout(() => {
-        setDoorOpened();
-        if (statusText) {
-          statusText.textContent = `${cabinet.name} 已打开，密码验证成功`;
-        }
-      }, 800);
+  try {
+    const resp = await fetch('/api/open', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        box: Number(box),
+        password: password
+      })
     });
+
+    const data = await resp.json();
+
+    if (!resp.ok) {
+      setPasswordState(false, '请求失败');
+      if (statusText) {
+        statusText.textContent = `${cabinet.name} 请求失败：${data.detail ?? '未知错误'}`;
+      }
+      setDoorClosed();
+      return;
+    }
+
+    if (data.ok) {
+      setPasswordState(true, '校验通过');
+      setDoorOpened();
+      if (statusText) {
+        statusText.textContent = `${cabinet.name} 已打开，密码验证成功`;
+      }
+    } else {
+      setPasswordState(false, data.status || '校验失败');
+      setDoorClosed();
+      if (statusText) {
+        statusText.textContent = `${cabinet.name} 开柜失败：${data.status || '未知状态'}`;
+      }
+    }
+
+    console.log('open result:', data);
+  } catch (err) {
+    setPasswordState(false, '网络异常');
+    setDoorClosed();
+    if (statusText) {
+      statusText.textContent = `${cabinet.name} 网络异常，无法连接本地开柜服务`;
+    }
+    console.error(err);
+  }
+});
 
     document.getElementById('closeBtn')?.addEventListener('click', () => {
       const { box } = getParams();
@@ -925,7 +954,3 @@
   </script>
 </body>
 </html>
-```
-
-```
-```
